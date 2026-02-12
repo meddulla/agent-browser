@@ -16,6 +16,7 @@ export interface LaunchCommand extends BaseCommand {
   executablePath?: string;
   cdpPort?: number;
   cdpUrl?: string;
+  cdpHeaders?: Record<string, string>; // Headers for CDP connection
   extensions?: string[];
   profile?: string; // Path to persistent browser profile directory
   storageState?: string; // Path to storage state JSON file

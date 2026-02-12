@@ -1565,7 +1565,7 @@ Examples:
             r##"
 agent-browser connect - Connect to browser via CDP
 
-Usage: agent-browser connect <port|url>
+Usage: agent-browser connect <port|url> [-H "Name: Value"]...
 
 Connects to a running browser instance via Chrome DevTools Protocol (CDP).
 This allows controlling browsers, Electron apps, or remote browser services.
@@ -1573,6 +1573,9 @@ This allows controlling browsers, Electron apps, or remote browser services.
 Arguments:
   <port>               Local port number (e.g., 9222)
   <url>                Full WebSocket URL (ws://, wss://, http://, https://)
+
+Options:
+  -H "Name: Value"     Add HTTP header to CDP connection request (repeatable)
 
 Supported URL formats:
   - Port number: 9222 (connects to http://localhost:9222)
@@ -1593,6 +1596,12 @@ Examples:
 
   # Connect to remote browser service
   agent-browser connect "wss://browser-service.example.com/cdp?token=xyz"
+
+  # Connect to Cloudflare Browser Rendering with API key
+  agent-browser connect "wss://browser.example.com" -H "Authorization: Bearer $CF_API_KEY"
+
+  # Multiple headers
+  agent-browser connect "wss://browser.example.com" -H "Authorization: Bearer token" -H "X-Custom: value"
 
   # After connecting, run commands normally
   agent-browser snapshot
@@ -1777,7 +1786,8 @@ Options:
   --json                     JSON output
   --full, -f                 Full page screenshot
   --headed                   Show browser window (not headless)
-  --cdp <port>               Connect via CDP (Chrome DevTools Protocol)
+  --cdp <port|url>           Connect via CDP (Chrome DevTools Protocol)
+  -H "Name: Value"           HTTP header for CDP connection (repeatable, use with --cdp)
   --debug                    Debug output
   --version, -V              Show version
 

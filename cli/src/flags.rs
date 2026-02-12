@@ -9,6 +9,7 @@ pub struct Flags {
     pub headers: Option<String>,
     pub executable_path: Option<String>,
     pub cdp: Option<String>,
+    pub cdp_headers: Vec<(String, String)>, // Headers for CDP connection (-H name value)
     pub extensions: Vec<String>,
     pub profile: Option<String>,
     pub state: Option<String>,
@@ -54,6 +55,7 @@ pub fn parse_flags(args: &[String]) -> Flags {
         headers: None,
         executable_path: env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
         cdp: None,
+        cdp_headers: Vec::new(),
         extensions: extensions_env,
         profile: env::var("AGENT_BROWSER_PROFILE").ok(),
         state: env::var("AGENT_BROWSER_STATE").ok(),
@@ -113,6 +115,19 @@ pub fn parse_flags(args: &[String]) -> Flags {
             "--cdp" => {
                 if let Some(s) = args.get(i + 1) {
                     flags.cdp = Some(s.clone());
+                    i += 1;
+                }
+            }
+            "-H" => {
+                // -H takes one argument in curl-style format: "Header-Name: Header-Value"
+                if let Some(header) = args.get(i + 1) {
+                    if let Some(colon_pos) = header.find(':') {
+                        let name = header[..colon_pos].trim().to_string();
+                        let value = header[colon_pos + 1..].trim().to_string();
+                        if !name.is_empty() {
+                            flags.cdp_headers.push((name, value));
+                        }
+                    }
                     i += 1;
                 }
             }
@@ -184,7 +199,6 @@ pub fn parse_flags(args: &[String]) -> Flags {
 
 pub fn clean_args(args: &[String]) -> Vec<String> {
     let mut result = Vec::new();
-    let mut skip_next = false;
 
     // Global flags that should be stripped from command args
     const GLOBAL_FLAGS: &[&str] = &[
@@ -213,13 +227,19 @@ pub fn clean_args(args: &[String]) -> Vec<String> {
         "--device",
     ];
 
+    let mut skip_count = 0;
     for arg in args.iter() {
-        if skip_next {
-            skip_next = false;
+        if skip_count > 0 {
+            skip_count -= 1;
+            continue;
+        }
+        // -H takes one argument (curl-style "Name: Value")
+        if arg == "-H" {
+            skip_count = 1;
             continue;
         }
         if GLOBAL_FLAGS_WITH_VALUE.contains(&arg.as_str()) {
-            skip_next = true;
+            skip_count = 1;
             continue;
         }
         // Only strip known global flags, not command-specific flags
@@ -387,5 +407,59 @@ mod tests {
         assert!(flags.cli_proxy);
         assert!(!flags.cli_extensions);
         assert!(!flags.cli_state);
+    }
+
+    #[test]
+    fn test_parse_cdp_headers_single() {
+        let input: Vec<String> = vec![
+            "--cdp".to_string(),
+            "wss://example.com".to_string(),
+            "-H".to_string(),
+            "Authorization: Bearer token123".to_string(),
+            "snapshot".to_string(),
+        ];
+        let flags = parse_flags(&input);
+        assert_eq!(flags.cdp, Some("wss://example.com".to_string()));
+        assert_eq!(flags.cdp_headers.len(), 1);
+        assert_eq!(
+            flags.cdp_headers[0],
+            ("Authorization".to_string(), "Bearer token123".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_cdp_headers_multiple() {
+        let input: Vec<String> = vec![
+            "--cdp".to_string(),
+            "wss://example.com".to_string(),
+            "-H".to_string(),
+            "Authorization: Bearer token".to_string(),
+            "-H".to_string(),
+            "X-Custom: value".to_string(),
+            "snapshot".to_string(),
+        ];
+        let flags = parse_flags(&input);
+        assert_eq!(flags.cdp_headers.len(), 2);
+        assert_eq!(
+            flags.cdp_headers[0],
+            ("Authorization".to_string(), "Bearer token".to_string())
+        );
+        assert_eq!(
+            flags.cdp_headers[1],
+            ("X-Custom".to_string(), "value".to_string())
+        );
+    }
+
+    #[test]
+    fn test_clean_args_removes_cdp_headers() {
+        let input: Vec<String> = vec![
+            "--cdp".to_string(),
+            "9222".to_string(),
+            "-H".to_string(),
+            "Auth: token".to_string(),
+            "snapshot".to_string(),
+        ];
+        let clean = clean_args(&input);
+        assert_eq!(clean, vec!["snapshot"]);
     }
 }

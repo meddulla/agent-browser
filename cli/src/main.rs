@@ -367,6 +367,16 @@ fn main() {
             launch_cmd["ignoreHTTPSErrors"] = json!(true);
         }
 
+        // Add CDP headers if provided via -H flags
+        if !flags.cdp_headers.is_empty() {
+            let headers_obj: serde_json::Map<String, serde_json::Value> = flags
+                .cdp_headers
+                .iter()
+                .map(|(k, v)| (k.clone(), json!(v)))
+                .collect();
+            launch_cmd["cdpHeaders"] = json!(headers_obj);
+        }
+
         let err = match send_command(launch_cmd, &flags.session) {
             Ok(resp) if resp.success => None,
             Ok(resp) => Some(

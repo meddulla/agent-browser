@@ -473,13 +473,32 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
                 context: "connect".to_string(),
                 usage: "connect <port|url>",
             })?;
+
+            // Build cdpHeaders object if -H flags were provided
+            let cdp_headers: Option<serde_json::Map<String, serde_json::Value>> =
+                if flags.cdp_headers.is_empty() {
+                    None
+                } else {
+                    Some(
+                        flags
+                            .cdp_headers
+                            .iter()
+                            .map(|(k, v)| (k.clone(), json!(v)))
+                            .collect(),
+                    )
+                };
+
             // Check if it's a URL (ws://, wss://, http://, https://)
             if endpoint.starts_with("ws://")
                 || endpoint.starts_with("wss://")
                 || endpoint.starts_with("http://")
                 || endpoint.starts_with("https://")
             {
-                Ok(json!({ "id": id, "action": "launch", "cdpUrl": endpoint }))
+                let mut cmd = json!({ "id": id, "action": "launch", "cdpUrl": endpoint });
+                if let Some(headers) = cdp_headers {
+                    cmd["cdpHeaders"] = json!(headers);
+                }
+                Ok(cmd)
             } else {
                 // It's a port number - validate and use cdpPort field
                 let port: u16 = match endpoint.parse::<u32>() {
@@ -509,7 +528,11 @@ pub fn parse_command(args: &[String], flags: &Flags) -> Result<Value, ParseError
                         });
                     }
                 };
-                Ok(json!({ "id": id, "action": "launch", "cdpPort": port }))
+                let mut cmd = json!({ "id": id, "action": "launch", "cdpPort": port });
+                if let Some(headers) = cdp_headers {
+                    cmd["cdpHeaders"] = json!(headers);
+                }
+                Ok(cmd)
             }
         }
 
@@ -1419,6 +1442,7 @@ mod tests {
             executable_path: None,
             extensions: Vec::new(),
             cdp: None,
+            cdp_headers: Vec::new(),
             profile: None,
             state: None,
             proxy: None,
@@ -2462,5 +2486,21 @@ mod tests {
         let cmd = parse_command(&args("connect 1"), &default_flags()).unwrap();
         assert_eq!(cmd["action"], "launch");
         assert_eq!(cmd["cdpPort"], 1);
+    }
+
+    #[test]
+    fn test_connect_with_headers() {
+        let mut flags = default_flags();
+        flags.cdp_headers = vec![
+            ("Authorization".to_string(), "Bearer token123".to_string()),
+        ];
+        let input: Vec<String> = vec![
+            "connect".to_string(),
+            "wss://example.com/cdp".to_string(),
+        ];
+        let cmd = parse_command(&input, &flags).unwrap();
+        assert_eq!(cmd["action"], "launch");
+        assert_eq!(cmd["cdpUrl"], "wss://example.com/cdp");
+        assert_eq!(cmd["cdpHeaders"]["Authorization"], "Bearer token123");
     }
 }
